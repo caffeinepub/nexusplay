@@ -1,5 +1,5 @@
-import { useState, useRef } from 'react';
-import { Search, Globe, ExternalLink, ArrowRight } from 'lucide-react';
+import { useState, useRef, useEffect } from 'react';
+import { Search, Globe, ArrowRight, RefreshCw, Home } from 'lucide-react';
 import type { SearchEngine } from '../hooks/useSettings';
 
 interface WebSearcherProps {
@@ -7,20 +7,26 @@ interface WebSearcherProps {
   initialQuery?: string;
 }
 
-function getSearchUrl(engine: SearchEngine, query: string): string {
-  const encoded = encodeURIComponent(query.trim());
-  switch (engine) {
-    case 'bing': return `https://www.bing.com/search?q=${encoded}`;
-    case 'google': return `https://www.google.com/search?q=${encoded}`;
-    default: return `https://duckduckgo.com/?q=${encoded}&ia=web`;
-  }
-}
+// Public SearXNG instances that allow embedding (X-Frame-Options: ALLOWALL or none)
+const SEARXNG_INSTANCES = [
+  'https://searx.be',
+  'https://search.inetol.net',
+  'https://search.mdosch.de',
+];
 
-function getHomeUrl(engine: SearchEngine): string {
+function getEmbedUrl(engine: SearchEngine, query: string): string {
+  const encoded = encodeURIComponent(query.trim());
+  if (!query.trim()) {
+    return `${SEARXNG_INSTANCES[0]}`;
+  }
+  // SearXNG supports all engines via its metasearch
   switch (engine) {
-    case 'bing': return 'https://www.bing.com';
-    case 'google': return 'https://www.google.com';
-    default: return 'https://duckduckgo.com';
+    case 'google':
+      return `${SEARXNG_INSTANCES[0]}/?q=${encoded}&engines=google`;
+    case 'bing':
+      return `${SEARXNG_INSTANCES[0]}/?q=${encoded}&engines=bing`;
+    default:
+      return `${SEARXNG_INSTANCES[0]}/?q=${encoded}&engines=duckduckgo`;
   }
 }
 
@@ -30,68 +36,92 @@ const ENGINE_LABELS: Record<SearchEngine, string> = {
   google: 'Google',
 };
 
-const ENGINE_ICONS: Record<SearchEngine, string> = {
-  duckduckgo: '🦆',
-  bing: '🔷',
-  google: '🔍',
-};
-
-const QUICK_SUGGESTIONS = [
-  'How to code', 'Free games', 'Math help', 'Science facts',
-  'History today', 'Latest news', 'Funny videos', 'Study tips',
-];
-
 export function WebSearcher({ searchEngine, initialQuery = '' }: WebSearcherProps) {
   const [query, setQuery] = useState(initialQuery);
+  const [iframeUrl, setIframeUrl] = useState(() =>
+    initialQuery ? getEmbedUrl(searchEngine, initialQuery) : SEARXNG_INSTANCES[0]
+  );
+  const [loading, setLoading] = useState(true);
+  const [instanceIdx, setInstanceIdx] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
+  const iframeRef = useRef<HTMLIFrameElement>(null);
+
+  useEffect(() => {
+    if (initialQuery) {
+      setIframeUrl(getEmbedUrl(searchEngine, initialQuery));
+    }
+  }, [initialQuery, searchEngine]);
 
   const handleSearch = () => {
-    if (!query.trim()) {
-      window.open(getHomeUrl(searchEngine), '_blank', 'noopener,noreferrer');
-      return;
-    }
-    window.open(getSearchUrl(searchEngine, query), '_blank', 'noopener,noreferrer');
+    const url = query.trim()
+      ? getEmbedUrl(searchEngine, query)
+      : SEARXNG_INSTANCES[instanceIdx];
+    setIframeUrl(url);
+    setLoading(true);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter') handleSearch();
   };
 
-  const handleSuggestion = (s: string) => {
-    setQuery(s);
-    window.open(getSearchUrl(searchEngine, s), '_blank', 'noopener,noreferrer');
+  const handleRefresh = () => {
+    setLoading(true);
+    if (iframeRef.current) {
+      iframeRef.current.src = iframeUrl;
+    }
+  };
+
+  const handleHome = () => {
+    setQuery('');
+    setIframeUrl(SEARXNG_INSTANCES[instanceIdx]);
+    setLoading(true);
+  };
+
+  const tryNextInstance = () => {
+    const next = (instanceIdx + 1) % SEARXNG_INSTANCES.length;
+    setInstanceIdx(next);
+    const url = query.trim()
+      ? `${SEARXNG_INSTANCES[next]}/?q=${encodeURIComponent(query.trim())}`
+      : SEARXNG_INSTANCES[next];
+    setIframeUrl(url);
+    setLoading(true);
   };
 
   return (
-    <div className="flex-1 flex flex-col items-center justify-center px-4 py-12 animate-fade-in">
-      {/* Header */}
-      <div className="mb-8 flex flex-col items-center gap-2">
-        <div className="w-16 h-16 rounded-2xl bg-neon-cyan/10 border border-neon-cyan/20 flex items-center justify-center text-3xl mb-2">
-          <Globe className="w-8 h-8 text-neon-cyan" />
-        </div>
-        <h1 className="text-2xl font-bold text-foreground">Web Search</h1>
-        <p className="text-sm text-muted-foreground">
-          Using {ENGINE_ICONS[searchEngine]} {ENGINE_LABELS[searchEngine]}
-        </p>
-      </div>
-
-      {/* Search bar */}
-      <div className="w-full max-w-2xl mb-4">
-        <div className="flex items-center gap-2 bg-card border border-white/10 rounded-2xl px-4 py-3 focus-within:border-neon-cyan/50 transition-colors shadow-lg">
-          <Search className="w-5 h-5 text-muted-foreground shrink-0" />
+    <div className="flex-1 flex flex-col overflow-hidden">
+      {/* Search bar toolbar */}
+      <div className="shrink-0 px-4 py-2 border-b border-white/10 bg-card/50 backdrop-blur-sm flex items-center gap-2">
+        <button
+          type="button"
+          onClick={handleHome}
+          className="p-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-white/10 transition-colors"
+          title="Home"
+        >
+          <Home className="w-4 h-4" />
+        </button>
+        <button
+          type="button"
+          onClick={handleRefresh}
+          className="p-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-white/10 transition-colors"
+          title="Refresh"
+        >
+          <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+        </button>
+        <div className="flex-1 flex items-center gap-2 bg-background border border-white/10 rounded-xl px-3 py-1.5 focus-within:border-neon-cyan/50 transition-colors">
+          <Globe className="w-4 h-4 text-muted-foreground shrink-0" />
           <input
             ref={inputRef}
             type="text"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder={`Search with ${ENGINE_LABELS[searchEngine]}...`}
-            className="flex-1 bg-transparent text-base text-foreground placeholder:text-muted-foreground outline-none"
+            placeholder={`Search with ${ENGINE_LABELS[searchEngine]}... (powered by SearXNG)`}
+            className="flex-1 bg-transparent text-sm text-foreground placeholder:text-muted-foreground outline-none"
           />
           <button
             type="button"
             onClick={handleSearch}
-            className="p-2 rounded-xl bg-neon-cyan/10 text-neon-cyan border border-neon-cyan/30 hover:bg-neon-cyan/20 transition-colors"
+            className="p-1 rounded-lg text-neon-cyan hover:bg-neon-cyan/10 transition-colors"
           >
             <ArrowRight className="w-4 h-4" />
           </button>
@@ -99,33 +129,42 @@ export function WebSearcher({ searchEngine, initialQuery = '' }: WebSearcherProp
         <button
           type="button"
           onClick={handleSearch}
-          className="mt-3 w-full py-3 rounded-xl bg-neon-cyan/10 text-neon-cyan border border-neon-cyan/30 font-semibold text-sm flex items-center justify-center gap-2 hover:bg-neon-cyan/20 transition-colors"
+          className="px-3 py-1.5 rounded-xl bg-neon-cyan/10 text-neon-cyan border border-neon-cyan/30 text-xs font-semibold flex items-center gap-1.5 hover:bg-neon-cyan/20 transition-colors"
         >
-          <ExternalLink className="w-4 h-4" />
-          Search — Opens in New Tab
+          <Search className="w-3.5 h-3.5" />
+          Search
         </button>
       </div>
 
-      {/* Info banner */}
-      <div className="w-full max-w-2xl mb-8 px-4 py-3 rounded-xl bg-white/5 border border-white/10 text-xs text-muted-foreground text-center">
-        Search opens in a new tab. All major search engines (Google, Bing, DuckDuckGo) block being embedded directly in pages — opening in a new tab is the only way they work. Your tab cloak keeps this tab safe!
-      </div>
-
-      {/* Quick search suggestions */}
-      <div className="w-full max-w-2xl">
-        <p className="text-xs text-muted-foreground uppercase tracking-widest mb-3 text-center">Quick Searches</p>
-        <div className="flex flex-wrap gap-2 justify-center">
-          {QUICK_SUGGESTIONS.map((s) => (
+      {/* Iframe browser */}
+      <div className="flex-1 relative">
+        {loading && (
+          <div className="absolute inset-0 flex flex-col items-center justify-center bg-background z-10 gap-3">
+            <div className="w-8 h-8 border-2 border-neon-cyan/30 border-t-neon-cyan rounded-full animate-spin" />
+            <p className="text-xs text-muted-foreground">Loading search engine...</p>
+          </div>
+        )}
+        <iframe
+          ref={iframeRef}
+          src={iframeUrl}
+          className="w-full h-full border-0"
+          title="Web Search"
+          onLoad={() => setLoading(false)}
+          onError={tryNextInstance}
+          sandbox="allow-same-origin allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox"
+        />
+        {/* Fallback overlay if iframe fails */}
+        {!loading && (
+          <div className="absolute bottom-3 right-3 flex gap-2">
             <button
               type="button"
-              key={s}
-              onClick={() => handleSuggestion(s)}
-              className="px-3 py-1.5 rounded-full bg-card border border-white/10 text-sm text-foreground hover:border-neon-cyan/40 hover:text-neon-cyan transition-colors"
+              onClick={tryNextInstance}
+              className="px-2.5 py-1 rounded-lg bg-card border border-white/10 text-xs text-muted-foreground hover:text-foreground transition-colors"
             >
-              {s}
+              Try different server
             </button>
-          ))}
-        </div>
+          </div>
+        )}
       </div>
     </div>
   );
