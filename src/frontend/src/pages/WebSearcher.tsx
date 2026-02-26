@@ -1,5 +1,5 @@
-import { useState, useRef, useEffect } from 'react';
-import { Search, Globe, X } from 'lucide-react';
+import { useState, useRef } from 'react';
+import { Search, Globe, ExternalLink, ArrowRight } from 'lucide-react';
 import type { SearchEngine } from '../hooks/useSettings';
 
 interface WebSearcherProps {
@@ -8,14 +8,7 @@ interface WebSearcherProps {
 }
 
 function getSearchUrl(engine: SearchEngine, query: string): string {
-  if (!query.trim()) {
-    switch (engine) {
-      case 'bing': return 'https://www.bing.com';
-      case 'google': return 'https://www.google.com';
-      default: return 'https://duckduckgo.com';
-    }
-  }
-  const encoded = encodeURIComponent(query);
+  const encoded = encodeURIComponent(query.trim());
   switch (engine) {
     case 'bing': return `https://www.bing.com/search?q=${encoded}`;
     case 'google': return `https://www.google.com/search?q=${encoded}`;
@@ -23,83 +16,115 @@ function getSearchUrl(engine: SearchEngine, query: string): string {
   }
 }
 
+function getHomeUrl(engine: SearchEngine): string {
+  switch (engine) {
+    case 'bing': return 'https://www.bing.com';
+    case 'google': return 'https://www.google.com';
+    default: return 'https://duckduckgo.com';
+  }
+}
+
 const ENGINE_LABELS: Record<SearchEngine, string> = {
   duckduckgo: 'DuckDuckGo',
   bing: 'Bing',
-  google: 'Google (may not work)',
+  google: 'Google',
 };
+
+const ENGINE_ICONS: Record<SearchEngine, string> = {
+  duckduckgo: '🦆',
+  bing: '🔷',
+  google: '🔍',
+};
+
+const QUICK_SUGGESTIONS = [
+  'How to code', 'Free games', 'Math help', 'Science facts',
+  'History today', 'Latest news', 'Funny videos', 'Study tips',
+];
 
 export function WebSearcher({ searchEngine, initialQuery = '' }: WebSearcherProps) {
   const [query, setQuery] = useState(initialQuery);
-  const [currentUrl, setCurrentUrl] = useState(() => getSearchUrl(searchEngine, initialQuery));
   const inputRef = useRef<HTMLInputElement>(null);
 
-  useEffect(() => {
-    if (initialQuery) {
-      setQuery(initialQuery);
-      setCurrentUrl(getSearchUrl(searchEngine, initialQuery));
-    }
-  }, [initialQuery, searchEngine]);
-
   const handleSearch = () => {
-    setCurrentUrl(getSearchUrl(searchEngine, query));
+    if (!query.trim()) {
+      window.open(getHomeUrl(searchEngine), '_blank', 'noopener,noreferrer');
+      return;
+    }
+    window.open(getSearchUrl(searchEngine, query), '_blank', 'noopener,noreferrer');
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter') handleSearch();
   };
 
+  const handleSuggestion = (s: string) => {
+    setQuery(s);
+    window.open(getSearchUrl(searchEngine, s), '_blank', 'noopener,noreferrer');
+  };
+
   return (
-    <div className="flex-1 flex flex-col overflow-hidden animate-fade-in">
-      {/* Search bar - sticky */}
-      <div className="shrink-0 px-4 md:px-6 py-3 bg-background/80 backdrop-blur-sm border-b border-white/5">
-        <div className="max-w-4xl mx-auto flex gap-3 items-center">
-          <Globe className="w-5 h-5 text-neon-cyan shrink-0" />
-          <div className="flex-1 flex items-center gap-2 bg-card border border-white/5 rounded-xl px-4 py-2 focus-within:border-neon-cyan/40 transition-colors">
-            <Search className="w-4 h-4 text-muted-foreground shrink-0" />
-            <input
-              ref={inputRef}
-              type="text"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              onKeyDown={handleKeyDown}
-              placeholder={`Search with ${ENGINE_LABELS[searchEngine]}...`}
-              className="flex-1 bg-transparent text-sm text-foreground placeholder:text-muted-foreground outline-none"
-            />
-            {query && (
-              <button
-                onClick={() => { setQuery(''); inputRef.current?.focus(); }}
-                className="text-muted-foreground hover:text-foreground transition-colors"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            )}
-          </div>
-          <button
-            onClick={handleSearch}
-            className="px-4 py-2 rounded-xl bg-neon-cyan/10 text-neon-cyan border border-neon-cyan/30 text-sm font-semibold hover:bg-neon-cyan/20 transition-colors whitespace-nowrap"
-          >
-            Search
-          </button>
+    <div className="flex-1 flex flex-col items-center justify-center px-4 py-12 animate-fade-in">
+      {/* Header */}
+      <div className="mb-8 flex flex-col items-center gap-2">
+        <div className="w-16 h-16 rounded-2xl bg-neon-cyan/10 border border-neon-cyan/20 flex items-center justify-center text-3xl mb-2">
+          <Globe className="w-8 h-8 text-neon-cyan" />
         </div>
-        {searchEngine === 'google' && (
-          <p className="text-center text-xs text-yellow-400/70 mt-2">
-            Note: Google blocks iframe embedding. Results may not load.
-          </p>
-        )}
+        <h1 className="text-2xl font-bold text-foreground">Web Search</h1>
+        <p className="text-sm text-muted-foreground">
+          Using {ENGINE_ICONS[searchEngine]} {ENGINE_LABELS[searchEngine]}
+        </p>
       </div>
 
-      {/* iframe */}
-      <div className="flex-1 relative">
-        <iframe
-          key={currentUrl}
-          src={currentUrl}
-          title="Web Search"
-          className="w-full h-full border-0"
-          sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-navigation"
-        />
-        <div className="absolute top-4 left-1/2 -translate-x-1/2 text-xs text-white/20 pointer-events-none bg-black/30 px-3 py-1 rounded-full">
-          {currentUrl}
+      {/* Search bar */}
+      <div className="w-full max-w-2xl mb-4">
+        <div className="flex items-center gap-2 bg-card border border-white/10 rounded-2xl px-4 py-3 focus-within:border-neon-cyan/50 transition-colors shadow-lg">
+          <Search className="w-5 h-5 text-muted-foreground shrink-0" />
+          <input
+            ref={inputRef}
+            type="text"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            onKeyDown={handleKeyDown}
+            placeholder={`Search with ${ENGINE_LABELS[searchEngine]}...`}
+            className="flex-1 bg-transparent text-base text-foreground placeholder:text-muted-foreground outline-none"
+          />
+          <button
+            type="button"
+            onClick={handleSearch}
+            className="p-2 rounded-xl bg-neon-cyan/10 text-neon-cyan border border-neon-cyan/30 hover:bg-neon-cyan/20 transition-colors"
+          >
+            <ArrowRight className="w-4 h-4" />
+          </button>
+        </div>
+        <button
+          type="button"
+          onClick={handleSearch}
+          className="mt-3 w-full py-3 rounded-xl bg-neon-cyan/10 text-neon-cyan border border-neon-cyan/30 font-semibold text-sm flex items-center justify-center gap-2 hover:bg-neon-cyan/20 transition-colors"
+        >
+          <ExternalLink className="w-4 h-4" />
+          Search — Opens in New Tab
+        </button>
+      </div>
+
+      {/* Info banner */}
+      <div className="w-full max-w-2xl mb-8 px-4 py-3 rounded-xl bg-white/5 border border-white/10 text-xs text-muted-foreground text-center">
+        Search opens in a new tab. All major search engines (Google, Bing, DuckDuckGo) block being embedded directly in pages — opening in a new tab is the only way they work. Your tab cloak keeps this tab safe!
+      </div>
+
+      {/* Quick search suggestions */}
+      <div className="w-full max-w-2xl">
+        <p className="text-xs text-muted-foreground uppercase tracking-widest mb-3 text-center">Quick Searches</p>
+        <div className="flex flex-wrap gap-2 justify-center">
+          {QUICK_SUGGESTIONS.map((s) => (
+            <button
+              type="button"
+              key={s}
+              onClick={() => handleSuggestion(s)}
+              className="px-3 py-1.5 rounded-full bg-card border border-white/10 text-sm text-foreground hover:border-neon-cyan/40 hover:text-neon-cyan transition-colors"
+            >
+              {s}
+            </button>
+          ))}
         </div>
       </div>
     </div>
