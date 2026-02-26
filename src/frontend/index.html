@@ -1,0 +1,25 @@
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Classroom Games</title>
+    <script>
+      // Tab protection: resist navigation/close attempts from GoGuardian and similar tools
+      (function() {
+        history.pushState(null, '', location.href);
+        window.addEventListener('popstate', function() {
+          history.pushState(null, '', location.href);
+        });
+        document.addEventListener('visibilitychange', function() {
+          if (document.hidden) {
+            setTimeout(function() { window.focus(); }, 100);
+          }
+        });
+      })();
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
